@@ -1,0 +1,102 @@
+---
+name: pullrequest-security
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  actions: read
+  security-events: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependencies-analysis:
+    name: Dependencies Analysis (PR diff)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR HEAD
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run OSV Scanner on PR HEAD
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.5
+        with:
+          scan-args: |-
+            --format json
+            --output osv-head.json
+            --allow-no-lockfiles
+            ./
+        continue-on-error: true
+
+      - name: Checkout baseline commit
+        run: git checkout ${{ github.event.pull_request.base.sha }}
+
+      - name: Run OSV Scanner on baseline
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.5
+        with:
+          scan-args: |-
+            --format json
+            --output osv-baseline.json
+            --allow-no-lockfiles
+            ./
+        continue-on-error: true
+
+      - name: Generate differential report
+        uses: google/osv-scanner-action/osv-reporter-action@v2.3.5
+        with:
+          scan-args: |-
+            --old=osv-baseline.json
+            --new=osv-head.json
+            --output=osv-diff.sarif
+            --gh-annotations=false
+        continue-on-error: true
+
+      - name: Upload differential SARIF to Security Dashboard
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: osv-diff.sarif
+          category: pr-dependencies-diff
+
+      - name: Save differential report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-diff-report
+          path: osv-diff.sarif
+
+  source-code-analysis:
+    name: Source Code Analysis (PR diff)
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - name: Checkout PR with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Semgrep differential scan
+        run: |
+          semgrep scan \
+            --config .semgrep \
+            --baseline-commit ${{ github.event.pull_request.base.sha }} \
+            --sarif \
+            --output semgrep-diff.sarif \
+            || true
+
+      - name: Upload differential SARIF to Security Dashboard
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-diff.sarif
+          category: pr-source-code-diff
+
+      - name: Save differential report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-diff-report
+          path: semgrep-diff.sarif
