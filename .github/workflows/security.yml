@@ -22,10 +22,12 @@ jobs:
           scan-args: |-
             --format sarif
             --output DependenciesAnalysisFull.sarif
+            --allow-no-lockfiles
             ./
         continue-on-error: true
 
       - name: Upload SARIF to Security Dashboard
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: DependenciesAnalysisFull.sarif
@@ -49,6 +51,7 @@ jobs:
             || true
 
       - name: Upload SARIF to Security Dashboard
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: SourceCodeAnalysisFull.sarif
