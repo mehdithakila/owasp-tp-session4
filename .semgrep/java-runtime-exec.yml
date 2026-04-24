@@ -1,0 +1,17 @@
+rules:
+  - id: java-runtime-exec-dangerous
+    message: Usage of Runtime.exec() can lead to command injection vulnerabilities
+    severity: WARNING
+    languages:
+      - java
+    pattern: Runtime.getRuntime().exec(...)
+
+  - id: java-hardcoded-password
+    message: Hardcoded password detected
+    severity: ERROR
+    languages:
+      - java
+    patterns:
+      - pattern-either:
+          - pattern: String $X = "password";
+          - pattern: String $X = "admin123";
